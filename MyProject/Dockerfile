@@ -2,8 +2,8 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 COPY . .
-RUN dotnet restore MyProject.sln
-RUN dotnet publish MyProject.sln -c Release -o /app/publish
+RUN dotnet restore ./MyProject/MyProject.csproj
+RUN dotnet publish ./MyProject/MyProject.csproj -c Release -o /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
