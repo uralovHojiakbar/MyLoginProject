@@ -1,12 +1,12 @@
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-WORKDIR /src
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /app
 
 COPY . .
-RUN dotnet restore MyProject.sln
-RUN dotnet publish MyProject/MyProject.csproj -c Release -o /app/publish
+RUN dotnet restore
+RUN dotnet publish -c Release -o /app/publish
 
-FROM mcr.microsoft.com/dotnet/aspnet:8.0
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
 COPY --from=build /app/publish .
 EXPOSE 8080
-ENTRYPOINT ["dotnet","MyProject.dll"]
+ENTRYPOINT ["dotnet", "MyProject.dll"]
