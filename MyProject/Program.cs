@@ -1,4 +1,4 @@
-using Application.Common.Interfaces;
+﻿using Application.Common.Interfaces;
 using Application.Services;
 using Infrastructure.Emailing;
 using Infrastructure.Persistence;
@@ -7,31 +7,21 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi;
-//using Microsoft.AspNetCore.OpenApi;
+using Microsoft.OpenApi.Models;
 using MyProject.Middleware;
 using System.Text;
 using System.Threading.Channels;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// =======================
-// Controllers
-// =======================
 builder.Services.AddControllers();
 
-// =======================
-// Database
-// =======================
+// DB
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(
-        builder.Configuration.GetConnectionString("UserDbConnection")
-    )
+    options.UseNpgsql(builder.Configuration.GetConnectionString("UserDbConnection"))
 );
 
-// =======================
-// DI (Services & Repos)
-// =======================
+// DI
 builder.Services.AddScoped<IUserAdminRepository, UserAdminRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<UsersAdminService>();
@@ -40,61 +30,48 @@ builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
 builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
 
-// =======================
 // Email async queue
-// =======================
 builder.Services.AddSingleton(Channel.CreateUnbounded<EmailMessage>());
 builder.Services.AddSingleton<IEmailQueue, InMemoryEmailQueue>();
 builder.Services.AddSingleton<IEmailSender, ConsoleEmailSender>();
 builder.Services.AddHostedService<EmailBackgroundService>();
 
-// =======================
 // Middleware
-// =======================
 builder.Services.AddScoped<UserStatusMiddleware>();
 
-// =======================
-// CORS (frontend uchun)
-// =======================
+// CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("Frontend", policy =>
         policy.AllowAnyOrigin()
               .AllowAnyHeader()
-              .AllowAnyMethod()
-    );
+              .AllowAnyMethod());
 });
 
-// =======================
-// Swagger + JWT support
-// =======================
+// Swagger + JWT
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
-    {
-        Title = "MyProject API",
-        Version = "v1"
-    });
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "MyProject API", Version = "v1" });
 
-    c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
-        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Type = SecuritySchemeType.Http,
         Scheme = "bearer",
         BearerFormat = "JWT",
-        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        In = ParameterLocation.Header,
         Description = "Bearer {token}"
     });
 
-    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
-            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            new OpenApiSecurityScheme
             {
-                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                Reference = new OpenApiReference
                 {
-                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Type = ReferenceType.SecurityScheme,
                     Id = "Bearer"
                 }
             },
@@ -103,11 +80,10 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-
-// =======================
-// JWT Authentication
-// =======================
-var jwtKey = builder.Configuration["Jwt:Key"]!;
+// JWT
+var jwtKey = builder.Configuration["Jwt:Key"];
+if (string.IsNullOrWhiteSpace(jwtKey))
+    throw new InvalidOperationException("Jwt:Key is missing. Set Jwt__Key in Render env vars.");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -121,30 +97,21 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(jwtKey)
-            )
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
         };
     });
 
-// =======================
-// App build
-// =======================
 var app = builder.Build();
 
-// =======================
-// Render / Railway / Fly uchun
-// =======================
+// Reverse proxy headers (Render)
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
-    ForwardedHeaders =
-        ForwardedHeaders.XForwardedFor |
-        ForwardedHeaders.XForwardedProto
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
 });
 
-// =======================
-// Swagger (production�da ham)
-// =======================
+// Global exception -> JSON (500 emas, ma’noli statuslar)
+app.UseMiddleware<ApiExceptionMiddleware>();
+
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
@@ -152,11 +119,10 @@ app.UseSwaggerUI(c =>
     c.RoutePrefix = "swagger";
 });
 
-// =======================
-// Middlewares
-// =======================
 app.UseCors("Frontend");
 
+// Render’da odatda HTTPS tashqarida terminatsiya bo‘ladi
+// shuning uchun prod’da redirect shart emas
 if (!app.Environment.IsProduction())
 {
     app.UseHttpsRedirection();
@@ -164,13 +130,18 @@ if (!app.Environment.IsProduction())
 
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.UseMiddleware<UserStatusMiddleware>();
+
+// ✅ DB migrations: Render’da tablitsalar avtomatik yaratiladi
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
+}
 
 app.MapControllers();
 
-// =======================
-// Port (cloud deploy uchun)
-// =======================
 var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
 app.Urls.Add($"http://0.0.0.0:{port}");
 

@@ -7,33 +7,20 @@ namespace Infrastructure.Persistence;
 public class UserRepository : IUserRepository
 {
     private readonly AppDbContext _db;
+    public UserRepository(AppDbContext db) => _db = db;
 
-    public UserRepository(AppDbContext db)
-    {
-        _db = db;
-    }
-
-    // 👇 MUHIM JOY SHU
     public Task<User?> GetByEmailAsync(string email, CancellationToken ct)
     {
-        // AsNoTracking YO‘Q !!!
-        return _db.Users
-            .FirstOrDefaultAsync(x => x.Email == email, ct);
+        var normalized = email.Trim().ToLowerInvariant();
+        return _db.Users.FirstOrDefaultAsync(x => x.Email == normalized, ct);
     }
 
     public Task<User?> GetByIdAsync(Guid id, CancellationToken ct)
-    {
-        return _db.Users
-            .FirstOrDefaultAsync(x => x.Id == id, ct);
-    }
+        => _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
 
-    public async Task AddAsync(User user, CancellationToken ct)
-    {
-        await _db.Users.AddAsync(user, ct);
-    }
+    public Task AddAsync(User user, CancellationToken ct)
+        => _db.Users.AddAsync(user, ct).AsTask();
 
     public Task SaveChangesAsync(CancellationToken ct)
-    {
-        return _db.SaveChangesAsync(ct);
-    }
+        => _db.SaveChangesAsync(ct);
 }

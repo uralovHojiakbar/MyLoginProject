@@ -2,6 +2,8 @@
 using Application.DTOs.Auth;
 using Domain.Entities;
 using Domain.Enums;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace Application.Services;
 
@@ -11,17 +13,20 @@ public class AuthService
     private readonly IPasswordHasher _hasher;
     private readonly IJwtTokenGenerator _jwt;
     private readonly IEmailQueue _emails;
+    private readonly IConfiguration _config;
 
     public AuthService(
         IUserRepository users,
         IPasswordHasher hasher,
         IJwtTokenGenerator jwt,
-        IEmailQueue emails)
+        IEmailQueue emails,
+        IConfiguration config)
     {
         _users = users;
         _hasher = hasher;
         _jwt = jwt;
         _emails = emails;
+        _config = config;
     }
 
     public async Task<AuthResponse> RegisterAsync(RegisterRequest req, CancellationToken ct)
@@ -36,7 +41,6 @@ public class AuthService
             PasswordHash = _hasher.Hash(req.Password),
             Status = UserStatus.Unverified,
             CreatedAtUtc = DateTime.UtcNow,
-
             EmailConfirmationToken = confirmToken
         };
 
@@ -46,24 +50,26 @@ public class AuthService
         {
             await _users.SaveChangesAsync(ct);
         }
-        catch (Exception ex)
+        catch (DbUpdateException ex)
         {
-            // Unique index buzilsa (duplicate email) shu yerga tushadi
+            // Unique index (Email) buzilsa shu yerga tushadi
             throw new InvalidOperationException("Email allaqachon mavjud.", ex);
         }
 
-        // Async email queue (MOCK sender bo'lsa ham bo'ladi)
-        // Porting sendeda boshqacha bo'lsa (https port), keyin configdan olamiz.
-        var confirmLink = $"https://localhost:5001/api/auth/confirm?userId={user.Id}&token={confirmToken}";
+        // ✅ Render url’ni env’dan oling:
+        // Render’da backend url’ingizni qo‘ying:
+        // App__PublicBaseUrl = https://myloginproject-5.onrender.com
+        var baseUrl = _config["App:PublicBaseUrl"]?.TrimEnd('/')
+                      ?? "http://localhost:8080";
+
+        var confirmLink = $"{baseUrl}/api/auth/confirm?userId={user.Id}&token={confirmToken}";
 
         _emails.Enqueue(
             user.Email,
             "Confirm your email",
-            $"Salom {user.Name}!\nEmail tasdiqlash uchun linkni bosing:\n{confirmLink}"
+            $"Salom {user.Name}!\nEmail tasdiqlash uchun link:\n{confirmLink}"
         );
 
-        // Task talabi bo'yicha email tasdiqlanmaguncha ko'p endpointlarga ruxsat bermaymiz
-        // buni middleware qilyapti. Lekin JWT berib yuboramiz (foydalanuvchi confirm qiladi).
         var jwtToken = _jwt.Generate(user);
         return new AuthResponse(jwtToken);
     }
@@ -95,7 +101,6 @@ public class AuthService
         if (user is null)
             throw new InvalidOperationException("User topilmadi.");
 
-        // allaqachon confirmed bo'lsa qaytamiz
         if (user.EmailConfirmedAtUtc is not null)
             return;
 

@@ -6,7 +6,6 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 
-
 namespace Infrastructure.Security;
 
 public class JwtTokenGenerator : IJwtTokenGenerator
@@ -16,9 +15,16 @@ public class JwtTokenGenerator : IJwtTokenGenerator
 
     public string Generate(User user)
     {
-        var key = _config["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key not configured");
+        var key = _config["Jwt:Key"];
         var issuer = _config["Jwt:Issuer"];
         var audience = _config["Jwt:Audience"];
+
+        if (string.IsNullOrWhiteSpace(key))
+            throw new InvalidOperationException("Jwt:Key not configured. Render env: Jwt__Key");
+        if (string.IsNullOrWhiteSpace(issuer))
+            throw new InvalidOperationException("Jwt:Issuer not configured. Render env: Jwt__Issuer");
+        if (string.IsNullOrWhiteSpace(audience))
+            throw new InvalidOperationException("Jwt:Audience not configured. Render env: Jwt__Audience");
 
         var claims = new List<Claim>
         {
