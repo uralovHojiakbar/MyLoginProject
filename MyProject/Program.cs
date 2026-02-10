@@ -18,8 +18,12 @@ builder.Services.AddControllers();
 
 // DB
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("UserDbConnection"))
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("UserDbConnection"),
+        npgsql => npgsql.EnableRetryOnFailure(5)
+    )
 );
+
 
 // DI
 builder.Services.AddScoped<IUserAdminRepository, UserAdminRepository>();
