@@ -132,12 +132,9 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.UseMiddleware<UserStatusMiddleware>();
-
-// ✅ DB migrations: Render’da tablitsalar avtomatik yaratiladi
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.Migrate();
 }
 
 app.MapControllers();
