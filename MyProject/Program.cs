@@ -36,8 +36,9 @@ builder.Services.AddSingleton<IEmailQueue, InMemoryEmailQueue>();
 builder.Services.AddSingleton<IEmailSender, ConsoleEmailSender>();
 builder.Services.AddHostedService<EmailBackgroundService>();
 
-// Middleware
+// Middleware DI (MUHIM!)
 builder.Services.AddScoped<UserStatusMiddleware>();
+builder.Services.AddScoped<ApiExceptionMiddleware>(); // ✅ SHU QATOR YETISHMAYOTGANDI
 
 // CORS
 builder.Services.AddCors(options =>
@@ -109,9 +110,10 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
 });
 
-// Global exception -> JSON (500 emas, ma’noli statuslar)
+// Global exception -> JSON
 app.UseMiddleware<ApiExceptionMiddleware>();
 
+// Swagger
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
@@ -121,8 +123,6 @@ app.UseSwaggerUI(c =>
 
 app.UseCors("Frontend");
 
-// Render’da odatda HTTPS tashqarida terminatsiya bo‘ladi
-// shuning uchun prod’da redirect shart emas
 if (!app.Environment.IsProduction())
 {
     app.UseHttpsRedirection();
@@ -132,13 +132,13 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.UseMiddleware<UserStatusMiddleware>();
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-}
+
+// ✅ Root 500 bo‘lmasin (ixtiyoriy, lekin foydali)
+app.MapGet("/", () => Results.Ok("API is running"));
 
 app.MapControllers();
 
+// Port (Render)
 var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
 app.Urls.Add($"http://0.0.0.0:{port}");
 

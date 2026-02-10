@@ -17,10 +17,9 @@ public class ApiExceptionMiddleware : IMiddleware
         }
         catch (InvalidOperationException ex)
         {
-            // Duplicate email va shunga o‘xshash business errorlar
             await WriteProblem(context, StatusCodes.Status409Conflict, ex.Message);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             await WriteProblem(context, StatusCodes.Status500InternalServerError,
                 "Internal server error. Check server logs for details.");
